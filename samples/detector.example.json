@@ -1,0 +1,8 @@
+{
+  "modelPath": "models/car-detector-yolox.onnx",
+  "inputSize": 640,
+  "confidenceThreshold": 0.25,
+  "nmsThreshold": 0.45,
+  "carClassId": 2,
+  "deviceId": 0
+}

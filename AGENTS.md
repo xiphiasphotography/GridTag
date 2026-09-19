@@ -4,29 +4,30 @@ Instructions for coding agents (Codex) working in this repository. Read this fil
 
 ## 1. What this project is
 
-**GridTag** recognises start numbers on motorsport cars in RAW photos and adds the matching IPTC metadata (headline, description, keywords, drivers) to those photos in **Lightroom Classic (LrC)**.
+**GridTag** recognises start numbers on motorsport cars in RAW photos, validates the identification against the event entry list and optional visual evidence (car make/model and logos), and adds the matching IPTC metadata (headline, description, keywords, drivers) to those photos in **Lightroom Classic (LrC)**. GridTag is run only after the owner has selected and edited the photos; it is not a culling, editing or export application.
 
 Two cooperating parts:
 
-1. **`gridtag` CLI + libraries (.NET, C#)** — analysis: RAW preview → car detection → number reading → validation against an entry list → generated metadata fields.
-2. **LrC plugin (Lua)** — glue: collects the Picks, calls the CLI, applies the results to the LrC catalog, and provides a manual-correction flow.
+1. **`gridtag` CLI + libraries (.NET, C#)** — all application and recognition logic: RAW preview → car detection → number reading → optional visual evidence → validation against an entry list → generated metadata fields.
+2. **LrC plugin (Lua)** — deliberately thin glue: collects the Picks, calls the CLI, applies the results to the LrC catalog, and provides a manual-correction flow. Do not move recognition or business logic into Lua.
 
-The owner is an experienced Windows/C# developer. Prefer clear, boring, testable code over clever code. Communicate with the owner in Dutch if asked; keep code, identifiers, comments and docs in English (user-facing plugin strings in Dutch).
+The owner primarily develops in JavaScript and has some C# experience. Prefer straightforward, readable C# that is easy to follow from a JavaScript background; avoid clever framework abstractions. JavaScript/Node/Electron are **not** runtime dependencies of GridTag unless the owner explicitly asks for them. Communicate with the owner in Dutch if asked; keep code, identifiers and comments in English (user-facing plugin strings in Dutch).
 
 ## 2. Fixed workflow (do not redesign)
 
 ```
 Photo Mechanic: base IPTC (event/session constants)   ->  folder "yyyy-mm-dd - event\raw"
 FastStone Viewer: move selection                       ->  folder "yyyy-mm-dd - event"
-Lightroom Classic: edit, set Pick flag
-GridTag: only photos with Pick get car-specific metadata
+Lightroom Classic: owner edits photos, then sets final Pick flag
+GridTag: only those Picks are analysed and get car-specific metadata
 Lightroom Classic: review (incl. GridTag review collection), export
 ```
 
 Consequences:
 - Event/session constants (creator, credit, copyright, location, event name, `TransmissionReference`) are **owned by Photo Mechanic**. GridTag never writes them.
-- GridTag processes **Picks only** (`pickStatus == 1`).
+- GridTag processes **Picks only** (`pickStatus == 1`) after the owner has finished selection/editing. It does not rate, cull, edit, render or export photos.
 - GridTag writes into the **LrC catalog via the plugin SDK**, not into XMP sidecars.
+- The Lightroom plugin is only an adapter/UI layer. The C# CLI owns domain logic, matching, field generation and all vision integration.
 
 ## 3. Non-negotiables
 
@@ -37,7 +38,9 @@ Consequences:
 5. **Idempotent.** Re-running on the same photo must not duplicate keywords or leave stale GridTag keywords behind.
 6. **Contracts are versioned.** Every JSON file has `schemaVersion`. Breaking changes bump it and update `docs/contracts.md`, the C# records and the Lua code in the same change.
 7. **Manual overrides win.** A `manual` status is never overwritten by automatic runs.
-8. **Never invent SDK behaviour.** LrC SDK facts in §7 are marked verified / unverified. Do not rely on unverified behaviour without adding a test note in `docs/open-questions.md`.
+8. **Never invent SDK behaviour.** LrC SDK facts in §10 are marked verified / unverified. Do not rely on unverified behaviour without adding a test note in `docs/open-questions.md`.
+9. **Number first, evidence second.** Start-number recognition is the primary identification signal. Car make/model and logo recognition are validation/disambiguation evidence; they may strengthen a listed candidate or force `review` on conflict, but must not silently invent a participant.
+10. **Keep the runtime simple.** C#/.NET + the thin Lightroom Lua plugin are the application stack. Do not introduce Node.js, Electron, a web UI, a service or a database server without asking.
 
 ## 4. Architecture
 
@@ -45,7 +48,7 @@ Consequences:
 LrC plugin (Lua)                         gridtag CLI (.NET)
   collect Picks                            read manifest.json
   write manifest.json  ───────────────►    read entrylist.csv + session.json
-  LrTasks.execute(gridtag run ...)         per photo: session → preview → detect → read → match → build fields
+  LrTasks.execute(gridtag run ...)         per photo: session → preview → detect → read number → evidence → match → build fields
   read results.json    ◄───────────────    write results.json (UTF-8 without BOM)
   apply to catalog (write gates, chunks)
   create/update review collections
@@ -73,7 +76,7 @@ docs/          contracts.md  architecture.md  open-questions.md  reference/*.xmp
 samples/       entrylist.csv  session.example.json  manifest.example.json  results.example.json
 src/
   GridTag.Core/      domain, entry list, matching, field building, pipeline, JSON contracts  (no I/O to images, no ONNX)
-  GridTag.Vision/    IRawPreviewProvider / ICarDetector / IPlateReader implementations (ONNX Runtime + DirectML), stubs first
+  GridTag.Vision/    RAW preview + vision implementations behind interfaces: ICarDetector / IPlateReader first; later car-model and logo evidence classifiers; stubs first
   GridTag.Cli/       gridtag.exe: run | check-entrylist | fields | eval | version
 tests/GridTag.Core.Tests/   xUnit
 tools/                      Python training/export scripts (later; not part of the .NET build)
@@ -163,7 +166,7 @@ Vision returns an **n-best list** `NumberHypothesis(text, probability)`. Core de
 
 `NumberMatcher.Match`:
 1. Normalize each hypothesis; sum probability per entry-list number; mass of non-listed hypotheses = `outOfList`.
-2. Optional `IEvidence` (car model, driver-name text, later timing) multiplies candidate probability by a weight in `[0, 1.5]`, capped at 1.
+2. Optional `IEvidence` (first car make/model, then logo; later driver-name text, focus point and timing) multiplies candidate probability by a weight in `[0, 1.5]`, capped at 1. Evidence is always evaluated against entry-list candidates; it never creates a participant that is absent from the entry list.
 3. Best candidate + runner-up + margin. Decision `Auto` only if **no** reason applies; else `Review` with reasons. No listed hypothesis → `NoMatch` (`no_reading` / `no_entry_match`).
 
 Reasons and defaults (all in `MatchOptions`, all tunable via evaluation only):
@@ -177,7 +180,7 @@ Reasons and defaults (all in `MatchOptions`, all tunable via evaluation only):
 | `substring_risk:<n,…>` | best is contained in other listed numbers (`5` ⊂ `55` ⊂ `555`, `99` ⊂ `991`) and best < 0.98 |
 | `evidence_conflict:<name>` | an evidence weight for best < 0.25 |
 
-Default confusable digit pairs: `0-8 1-7 2-7 3-8 5-6 6-8 6-9 8-9`. Example cluster: 59, 66, 69, 96, 99 — the car model is the disambiguator (Ferrari / McLaren / Audi / Lamborghini).
+Default confusable digit pairs: `0-8 1-7 2-7 3-8 5-6 6-8 6-9 8-9`. Example cluster: 59, 66, 69, 96, 99 — car make/model is the preferred first disambiguator (Ferrari / McLaren / Audi / Lamborghini); a recognised manufacturer/team logo may provide weaker supporting evidence. A strong model/logo conflict with the number candidate must result in `review`, not an automatic correction.
 
 Pipeline rule: the **largest** detection must resolve as `Auto`, otherwise the photo is `review`. Smaller unresolved cars are dropped with note `secondary_unresolved` and do not block the photo.
 
@@ -230,7 +233,7 @@ Git: small commits, imperative subject lines, one concern per change.
 
 - Every Core behaviour in §6–§8 has a unit test. Golden XMP tests are never skipped or loosened to make a build pass.
 - Pipeline tests use fakes (`IRawPreviewProvider`, `ICarDetector`, `IPlateReader`); no image files needed.
-- Matching tests cover: strong single hypothesis (Auto), confusable cluster (Review), substring risk (`5` vs `55`), out-of-list dominance, evidence conflict, no reading.
+- Matching tests cover: strong single hypothesis (Auto), confusable cluster (Review), substring risk (`5` vs `55`), out-of-list dominance, supportive car-model evidence, conflicting car-model/logo evidence, and no reading.
 - A bug fix starts with a failing test.
 
 ## 14. Definition of done
@@ -247,8 +250,8 @@ Build and tests green · no new warnings · docs/contracts updated if any contra
 6. **CLI**: `run`, `check-entrylist`, `fields`, `version`, exit codes of §6. Example files in `samples/`.
 7. **Lightroom plugin**: `Info.lua`, metadata + tagset, `Prefs`, `Settings`, `Runner` (analyze + manual), review collections, `json.lua`. Lua syntax check clean. Then owner tests inside LrC and reports the open questions.
 8. **Evaluation harness** (`gridtag eval`) — **before** any model work.
-9. **Vision**: RAW preview extraction (embedded JPEG first, half-size decode as fallback), then car detection and number reading via ONNX Runtime + DirectML, behind the existing interfaces. Prefer permissively licensed models (check licences, AGPL is not acceptable for commercial use).
-10. Later: driver-name reader and car-model classifier as `IEvidence`; burst propagation; EXIF-time ↔ timing-data cross-check; WPF review UI; Python training tools in `tools/`.
+9. **Vision**: RAW preview extraction (embedded JPEG first, half-size decode as fallback), then car detection and number reading behind the existing interfaces. Keep the inference backend replaceable (for example ONNX Runtime/DirectML or WinML); do not leak backend-specific types into Core. Prefer permissively licensed models (check licences; AGPL is not acceptable for commercial use). Once number recognition has a measured baseline, add **car make/model classification as the first `IEvidence` control**, followed by optional logo recognition as supporting evidence. Re-run `gridtag eval` for every evidence/model change.
+10. Later: driver-name reader; focus-point evidence; burst propagation; EXIF-time ↔ timing-data cross-check; WPF review UI only if Lightroom review proves insufficient; Python training/export tools in `tools/`.
 
 ## 16. Working agreements
 

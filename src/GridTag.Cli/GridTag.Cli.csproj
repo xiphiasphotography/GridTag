@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>gridtag</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../GridTag.Core/GridTag.Core.csproj" />
+    <ProjectReference Include="../GridTag.Vision/GridTag.Vision.csproj" />
+  </ItemGroup>
+</Project>

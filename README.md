@@ -1,19 +1,79 @@
 # GridTag
 
-GridTag herkent startnummers op raceauto's in RAW-foto's en voegt daarmee automatisch de juiste IPTC-metadata toe in **Lightroom Classic**: headline, beschrijving, alt-tekst, keywords en rijdersnamen, gebaseerd op een entrylist.
+GridTag herkent startnummers op raceauto's in RAW-foto's, controleert de match tegen de entrylist en aanvullende visuele aanwijzingen zoals automerk/-model en logo's, en voegt daarna automatisch de juiste auto-specifieke IPTC-metadata toe in **Lightroom Classic**: headline, beschrijving, alt-tekst, keywords en rijdersnamen. GridTag komt pas in actie nadat de foto's handmatig zijn geselecteerd en bewerkt.
 
 > Status: projectstart. Deze README en `AGENTS.md` zijn bedoeld om het project met Codex in VS Code op te bouwen. De code wordt stap voor stap gemaakt volgens de takenlijst in `AGENTS.md` (§15).
+
+## Implementation status
+
+The .NET 10 scaffold is available. Core provides entry-list loading and lookup,
+field generation, number matching, JSON contracts, and the fake-backed tagging
+pipeline. The CLI provides `run`, `check-entrylist`, `fields`, `version`, and
+`eval`, with documented exit codes 0-3. The evaluation harness reports
+precision, recall, review rate, reasons, confusions and timing without tuning
+thresholds. The Lightroom adapter now contains the task 7 plugin workflow, but
+its SDK-dependent behavior still requires the manual checks in
+`docs/lightroom-test-plan.md`. Vision contains the local preview and optional
+ONNX/DirectML detector/plate-reader adapters; model weights remain external.
+
+## Evaluatie-data
+
+Uit de sample-data valt geen meetbare testset te maken: er zijn geen foto's en
+de paden in `samples/labels.example.csv` bestaan niet. Daarom zijn er twee
+praktische routes:
+
+- `work/labels.smoke.csv`: smoke-input voor de vier voorbeeldrijen. Dit test
+  alleen of `gridtag eval` het formaat leest; verwacht bij de meting alleen
+  `no_preview` als er geen echte foto's of providers beschikbaar zijn.
+- `tools/make_labels.py`: maakt een echte `work/labels.csv` uit een eigen
+  archief met RAW-bestanden en XMP-sidecars. Het script leest alleen en past
+  geen foto's of sidecars aan. Het vereist Python 3.8+ en geen extra packages.
+
+Gebruik:
+
+```text
+python tools/make_labels.py "D:\\Archief\\<map met RAW + sidecars van een eerder evenement>" ^
+    --entrylist samples/entrylist.csv --max-per-number 12 --sample 400 --out work/labels.csv
+```
+
+Het script herkent nummer-keywords zoals `#69` in `dc:subject` en schrijft:
+
+- `work/labels.csv`: foto's met precies één nummer-keyword;
+- `work/labels.review.csv`: meerdere nummers of nummers die niet in de
+  entrylist staan. Zet bij meerdere nummers de hoofdauto vooraan en verplaats
+  de gecorrigeerde rij daarna naar `labels.csv`, omdat eval het eerste nummer
+  als primair gebruikt;
+- geen rij voor foto's zonder nummer-keyword. Gebruik alleen
+  `--include-untagged` voor mappen waarvan zeker is dat er geen auto op staat;
+  zulke rijen krijgen een leeg nummer.
+
+Tips voor een bruikbare testset:
+
+- gebruik een eerder evenement met de bijbehorende entrylist;
+- gebruik `--max-per-number` zodat één auto de meting niet domineert;
+- meng sessies, lichtomstandigheden en camerahoeken;
+- gebruik foto's die niet in een trainingsset zitten;
+- laat `work/` in `.gitignore` staan, omdat de bestanden lokale padinformatie
+  bevatten.
+
+Als sidecars een andere notatie gebruiken dan `#69`, pas dan de regex
+`NUMBER_KEYWORD` bovenin `tools/make_labels.py` aan. Het script is getest op de
+twee XMP-voorbeelden en afgeleide gevallen: één nummer, meerdere nummers,
+geen nummer, onbekend nummer en een sidecar zonder RAW.
+
+Verify with `dotnet restore GridTag.slnx`, `dotnet build GridTag.slnx`, and
+`dotnet test GridTag.slnx`. No Lightroom or image files are needed for these checks.
 
 ## Workflow
 
 1. **Photo Mechanic**: basis-IPTC per evenement/sessie (map `yyyy-mm-dd - event\raw`).
 2. **FastStone Viewer**: selectie verplaatsen naar `yyyy-mm-dd - event`.
-3. **Lightroom Classic**: bewerken en **Pick** zetten.
-4. **GridTag** (menu in Lightroom): alleen de Picks krijgen de auto-specifieke metadata.
+3. **Lightroom Classic**: zelf bewerken; zet daarna de definitieve beelden op **Pick**.
+4. **GridTag** (menu in Lightroom): alleen die Picks worden geanalyseerd en krijgen auto-specifieke metadata.
 5. **Review in Lightroom**: foto's die niet automatisch lukken staan in de collectie `GridTag Review` (of `GridTag GeenAuto`). Typ daar zelf het nummer in het veld *Startnummer (handmatig)* en start "verwerk handmatige nummers".
 6. **Export** vanuit Lightroom.
 
-GridTag schrijft rechtstreeks in de Lightroom-catalogus. Er is dus geen "metadata opslaan" of "metadata lezen" nodig tussen de stappen, en er worden geen XMP-sidecars door de tool aangepast.
+GridTag schrijft rechtstreeks in de Lightroom-catalogus. Er is dus geen "metadata opslaan" of "metadata lezen" nodig tussen de stappen, en er worden geen XMP-sidecars door de tool aangepast. GridTag doet nadrukkelijk geen selectie, rating, beeldbewerking of export; dat blijft handwerk in de bestaande workflow.
 
 ## Hoe het werkt
 
@@ -21,16 +81,27 @@ GridTag schrijft rechtstreeks in de Lightroom-catalogus. Er is dus geen "metadat
 Lightroom-plugin (Lua)                     gridtag.exe (.NET)
   verzamelt Picks                            leest manifest.json
   schrijft manifest.json  ───────────►       leest entrylist.csv + session.json
-  start gridtag.exe                          per foto: sessie → preview → auto → nummer → validatie
+  start gridtag.exe                          per foto: sessie → preview → auto → nummer → evidence → validatie
   leest results.json      ◄───────────       schrijft results.json
   past metadata toe in de catalogus
 ```
 
 - **Validatie tegen de entrylist:** de tool kiest uit de nummers die echt bestaan, in plaats van vrije OCR te vertrouwen. Verwarbare nummers (bijv. 59/66/69/96/99) en deelnummers (5 in 55) gaan naar review.
+- **Nummer is primair, merk/model is controle:** een herkend automerk/-model kan een twijfelachtig nummer versterken of juist een conflict signaleren. Logoherkenning kan later als extra, zwakker bewijs worden gebruikt. Bij conflict gaat de foto naar review; GridTag verzint nooit zelf een deelnemer.
 - **Precisie boven recall:** liever een foto niet taggen dan verkeerd taggen.
 - **Alles lokaal:** geen cloud, geen uploads.
 
 Zie `AGENTS.md` voor de volledige regels, contracten en het matching-algoritme.
+
+
+## Technische keuze
+
+GridTag bestaat bewust uit twee kleine, gescheiden delen:
+
+- **C#/.NET (`gridtag.exe`)** bevat alle echte logica: RAW-preview, vision, entrylist, matching, confidence/evidence en veldgeneratie.
+- **Lightroom Classic plug-in (Lua)** blijft een dunne adapter: Picks ophalen, `gridtag.exe` starten, resultaten lezen en metadata in de Lightroom-catalogus zetten.
+
+De eigenaar programmeert voornamelijk in JavaScript en deels in C#. Daarom blijft de C#-code eenvoudig en expliciet opgebouwd. JavaScript/Node/Electron zijn geen runtime-onderdeel van GridTag; er komt geen aparte webinterface of service bij zolang Lightroom zelf voldoende UI biedt.
 
 ## Wat GridTag wel en niet schrijft
 
@@ -48,7 +119,7 @@ docs/        contracts, architectuur, open vragen, reference/*.xmp (goede voorbe
 samples/     entrylist.csv, session.example.json, manifest/results voorbeelden
 src/
   GridTag.Core     domein, entrylist, matching, veldgeneratie, pipeline
-  GridTag.Vision   RAW-preview, autodetectie, nummerlezer (ONNX)
+  GridTag.Vision   RAW-preview, autodetectie, nummerlezer; later merk/model- en logo-evidence
   GridTag.Cli      gridtag.exe
 tests/GridTag.Core.Tests   xUnit, incl. golden tests op de twee XMP-voorbeelden
 lightroom/GridTag.lrdevplugin   de Lightroom-plugin (Lua)
@@ -57,10 +128,10 @@ tools/       Python-scripts voor training (later)
 
 ## Vereisten
 
-- Windows, **.NET SDK 10** (LTS). Heb je een oudere SDK, pas dan `TargetFramework` aan in `Directory.Build.props`.
+- Windows, **.NET SDK 10**. `TargetFramework` blijft `net10.0` in `Directory.Build.props`; installeer bij een oudere SDK de .NET 10 SDK.
 - **Visual Studio Code** met de C# Dev Kit en een Lua-extensie (bijv. *Lua* van sumneko). Codex-extensie of Codex CLI.
 - **Lightroom Classic**. Voor de alt-tekstvelden is SDK-versie 13.2 of nieuwer nodig, oudere versies slaan die velden over.
-- Later voor de herkenning: bij voorkeur een GPU (DirectML).
+- Later voor de herkenning: bij voorkeur een GPU. De inference-backend blijft verwisselbaar (bijv. ONNX Runtime/DirectML of WinML).
 
 ## Aan de slag met Codex
 
@@ -96,6 +167,19 @@ Vastgelegd in `docs/open-questions.md`, onder andere:
 - Werkt **Person Shown** met twee rijders (en met welk scheidingsteken)?
 - Windows-quoting bij het starten van `gridtag.exe` vanuit de plugin.
 - Gedrag van collecties (`GridTag Review`) en de write-gates bij honderden foto's.
+
+
+## Herkenningsstrategie
+
+De eerste bruikbare versie wordt bewust in lagen opgebouwd:
+
+1. auto detecteren;
+2. startnummer lezen en alleen tegen geldige nummers uit de entrylist matchen;
+3. automerk/-model herkennen als eerste extra controle op de nummermatch;
+4. optioneel logo's gebruiken als aanvullende evidence;
+5. alleen automatisch taggen wanneer de gecombineerde evidence voldoende betrouwbaar en onderling consistent is; anders `GridTag Review`.
+
+Merk/model of een logo vervangt dus nooit de entrylist. Het doel is vooral fouten zoals een overtuigend gelezen `69` op een auto die visueel duidelijk bij nummer `96` uit de entrylist hoort, tegen te houden.
 
 ## Meetlat voor de herkenning
 

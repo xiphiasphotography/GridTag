@@ -1,0 +1,14 @@
+{
+  "modelPath": "models/digit-recognizer.onnx",
+  "inputWidth": 160,
+  "inputHeight": 64,
+  "beamWidth": 10,
+  "nBest": 10,
+  "blankClassId": 10,
+  "deviceId": 0,
+  "crop": {
+    "horizontalInset": 0.10,
+    "topInset": 0.15,
+    "bottomFraction": 0.65
+  }
+}

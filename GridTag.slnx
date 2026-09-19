@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GridTag.Core/GridTag.Core.csproj" />
+    <Project Path="src/GridTag.Vision/GridTag.Vision.csproj" />
+    <Project Path="src/GridTag.Cli/GridTag.Cli.csproj" />
+    <Project Path="src/GridTag.Review/GridTag.Review.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GridTag.Cli.Tests/GridTag.Cli.Tests.csproj" />
+    <Project Path="tests/GridTag.Core.Tests/GridTag.Core.Tests.csproj" />
+  </Folder>
+</Solution>

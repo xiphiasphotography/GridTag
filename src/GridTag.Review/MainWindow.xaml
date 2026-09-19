@@ -1,0 +1,39 @@
+<Window x:Class="GridTag.Review.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GridTag Review" Height="720" Width="1180" MinHeight="520" MinWidth="820">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,12">
+            <Button DockPanel.Dock="Right" Padding="16,8" Click="OpenResultsClick">Open results.json</Button>
+            <TextBlock Text="GridTag Review" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </DockPanel>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ListBox x:Name="PhotoList" DisplayMemberPath="Display" SelectionChanged="PhotoSelectionChanged" />
+            <Border Grid.Column="2" BorderBrush="#D0D5DD" BorderThickness="1" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="StatusText" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ReasonText" Margin="0,6,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PathText" Margin="0,6,0,12" TextWrapping="Wrap" Foreground="#667085" />
+                    </StackPanel>
+                    <Border Grid.Row="1" Background="#F2F4F7">
+                        <Image x:Name="PreviewImage" Stretch="Uniform" />
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
