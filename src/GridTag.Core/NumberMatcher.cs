@@ -68,11 +68,45 @@ public sealed class NumberMatcher
         if (hypothesisList.Length == 0)
             return new MatchResult(MatchStatus.NoMatch, null, 0, ["no_reading"]);
 
-        var candidateScores = new Dictionary<string, double>(StringComparer.Ordinal);
+        var scores = AccumulateScores(entryList, hypothesisList);
+        if (!scores.SawDigitHypothesis)
+            return new MatchResult(MatchStatus.NoMatch, null, 0, ["no_reading"]);
+
+        if (scores.CandidateScores.Count == 0)
+            return new MatchResult(MatchStatus.NoMatch, null, 0, ["no_entry_match"]);
+
+        var evidenceWeights = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var candidate in scores.CandidateScores.Keys)
+        {
+            var weight = evidence is null ? 1.0 : Math.Clamp(evidence.GetWeight(candidate, entryList), 0.0, 1.5);
+            evidenceWeights[candidate] = weight;
+        }
+
+        var ranked = scores.CandidateScores
+            .ToDictionary(pair => pair.Key, pair => pair.Value * evidenceWeights[pair.Key], StringComparer.Ordinal)
+            .OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToArray();
+
+        var bestNumber = ranked[0].Key;
+        var bestProbability = ranked[0].Value;
+        var reasons = EvaluateReasons(entryList, scores, ranked, evidence, evidenceWeights, bestNumber, bestProbability);
+
+        return new MatchResult(
+            reasons.Count == 0 ? MatchStatus.Auto : MatchStatus.Review,
+            bestNumber,
+            bestProbability,
+            reasons);
+    }
+
+    /// <summary>Sums hypothesis probability per listed number and tracks the non-listed mass.</summary>
+    private static HypothesisScores AccumulateScores(EntryList entryList, IReadOnlyList<NumberHypothesis> hypotheses)
+    {
+        var candidates = new Dictionary<string, double>(StringComparer.Ordinal);
         var outOfListMass = 0.0;
         var sawDigitHypothesis = false;
 
-        foreach (var hypothesis in hypothesisList)
+        foreach (var hypothesis in hypotheses)
         {
             if (string.IsNullOrWhiteSpace(hypothesis.Text) || !hypothesis.Text.Any(char.IsDigit))
             {
@@ -86,7 +120,7 @@ public sealed class NumberMatcher
                 var normalized = NumberNormalizer.Normalize(hypothesis.Text);
                 if (entryList.TryGetEntry(normalized, out var entry))
                 {
-                    candidateScores[entry.Number] = candidateScores.GetValueOrDefault(entry.Number) + hypothesis.Probability;
+                    candidates[entry.Number] = candidates.GetValueOrDefault(entry.Number) + hypothesis.Probability;
                 }
                 else
                 {
@@ -99,34 +133,21 @@ public sealed class NumberMatcher
             }
         }
 
-        if (!sawDigitHypothesis)
-            return new MatchResult(MatchStatus.NoMatch, null, 0, ["no_reading"]);
+        return new HypothesisScores(candidates, outOfListMass, sawDigitHypothesis);
+    }
 
-        if (candidateScores.Count == 0)
-            return new MatchResult(MatchStatus.NoMatch, null, 0, ["no_entry_match"]);
-
+    /// <summary>Collects every review reason that applies to the best candidate.</summary>
+    private List<string> EvaluateReasons(
+        EntryList entryList,
+        HypothesisScores scores,
+        IReadOnlyList<KeyValuePair<string, double>> ranked,
+        IEvidence? evidence,
+        IReadOnlyDictionary<string, double> evidenceWeights,
+        string bestNumber,
+        double bestProbability)
+    {
         var analysis = new EntryListAnalysis(entryList, new ConfusionMap());
-
-        var evidenceWeights = new Dictionary<string, double>(StringComparer.Ordinal);
-        foreach (var candidate in candidateScores.Keys)
-        {
-            var weight = evidence is null ? 1.0 : Math.Clamp(evidence.GetWeight(candidate, entryList), 0.0, 1.5);
-            evidenceWeights[candidate] = weight;
-        }
-
-        var adjustedScores = candidateScores
-            .ToDictionary(pair => pair.Key, pair => pair.Value * evidenceWeights[pair.Key], StringComparer.Ordinal);
-
-        var ranked = adjustedScores
-            .OrderByDescending(pair => pair.Value)
-            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
-            .ToArray();
-
-        var bestNumber = ranked[0].Key;
-        var bestProbability = ranked[0].Value;
-        var runnerUpProbability = ranked.Length > 1 ? ranked[1].Value : 0.0;
-        var bestRawScore = candidateScores[bestNumber];
-
+        var runnerUpProbability = ranked.Count > 1 ? ranked[1].Value : 0.0;
         var reasons = new List<string>();
 
         if (bestProbability < Options.LowConfidence)
@@ -135,7 +156,7 @@ public sealed class NumberMatcher
         if (bestProbability - runnerUpProbability < Options.SmallMargin)
             reasons.Add("small_margin");
 
-        if (outOfListMass > bestRawScore)
+        if (scores.OutOfListMass > scores.CandidateScores[bestNumber])
             reasons.Add("out_of_list_mass");
 
         if (analysis.Confusables.TryGetValue(bestNumber, out var confusables) && confusables.Count > 0 && bestProbability < Options.ConfusableThreshold)
@@ -147,10 +168,12 @@ public sealed class NumberMatcher
         if (evidence is not null && evidenceWeights.TryGetValue(bestNumber, out var evidenceWeight) && evidenceWeight < Options.EvidenceConflictThreshold)
             reasons.Add($"evidence_conflict:{evidence.Name}");
 
-        return new MatchResult(
-            reasons.Count == 0 ? MatchStatus.Auto : MatchStatus.Review,
-            bestNumber,
-            bestProbability,
-            reasons);
+        return reasons;
     }
 }
+
+/// <summary>Per-number probability sums plus the mass that matched no listed number.</summary>
+/// <param name="CandidateScores">Probability mass summed per listed number.</param>
+/// <param name="OutOfListMass">Probability mass of hypotheses outside the entry list.</param>
+/// <param name="SawDigitHypothesis">Whether any hypothesis contained a digit.</param>
+internal sealed record HypothesisScores(IReadOnlyDictionary<string, double> CandidateScores, double OutOfListMass, bool SawDigitHypothesis);

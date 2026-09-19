@@ -157,21 +157,52 @@ public static class CliApp
 
 	private static EventContext LoadEventContext(string path)
 	{
-		if (!File.Exists(path))
-			throw new FileNotFoundException($"Session file '{path}' was not found.", path);
-		using var document = JsonDocument.Parse(File.ReadAllText(path));
-		var root = document.RootElement;
-		var sessions = root.GetProperty("sessions").EnumerateArray().Select(session => new EventSession(
-			session.GetProperty("code").GetString() ?? throw new InvalidDataException("Session code is missing."),
-			session.GetProperty("name").GetString() ?? throw new InvalidDataException("Session name is missing."),
-			DateTimeOffset.Parse(session.GetProperty("start").GetString() ?? string.Empty),
-			DateTimeOffset.Parse(session.GetProperty("end").GetString() ?? string.Empty))).ToArray();
-		return EventContext.Default(
-			root.GetProperty("seriesName").GetString() ?? string.Empty,
-			root.GetProperty("eventFullName").GetString() ?? string.Empty,
-			root.GetProperty("location").GetString() ?? string.Empty,
-			root.GetProperty("defaultSession").GetString() ?? string.Empty,
-			sessions);
+	    if (!File.Exists(path))
+	        throw new FileNotFoundException($"Session file '{path}' was not found.", path);
+
+	    try
+	    {
+	        using var document = JsonDocument.Parse(File.ReadAllText(path));
+	        var root = document.RootElement;
+	        var sessions = RequireProperty(root, path, "sessions").EnumerateArray().Select(session => new EventSession(
+	            ReadString(session, path, "code"),
+	            ReadString(session, path, "name"),
+	            ReadTimestamp(session, path, "start"),
+	            ReadTimestamp(session, path, "end"))).ToArray();
+	        return EventContext.Default(
+	            ReadString(root, path, "seriesName"),
+	            ReadString(root, path, "eventFullName"),
+	            ReadString(root, path, "location"),
+	            ReadString(root, path, "defaultSession"),
+	            sessions);
+	    }
+	    catch (JsonException exception)
+	    {
+	        throw new InvalidDataException($"Session file '{path}' is not valid JSON: {exception.Message}", exception);
+	    }
+	}
+
+	private static JsonElement RequireProperty(JsonElement element, string path, string name)
+	{
+	    if (!element.TryGetProperty(name, out var value))
+	        throw new InvalidDataException($"Session file '{path}' is missing the required property '{name}'.");
+	    return value;
+	}
+
+	private static string ReadString(JsonElement element, string path, string name)
+	{
+	    var property = RequireProperty(element, path, name);
+	    if (property.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(property.GetString()))
+	        throw new InvalidDataException($"Session file '{path}' has an invalid value for '{name}'.");
+	    return property.GetString()!;
+	}
+
+	private static DateTimeOffset ReadTimestamp(JsonElement element, string path, string name)
+	{
+	    var value = ReadString(element, path, name);
+	    if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var timestamp))
+	        throw new InvalidDataException($"Session file '{path}' has an unparsable timestamp for '{name}': '{value}'.");
+	    return timestamp;
 	}
 
 	private static ICarDetector CreateCarDetector(IReadOnlyDictionary<string, string> options)

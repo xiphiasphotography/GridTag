@@ -27,7 +27,7 @@ public sealed class CliTests
         Assert.Equal(new[] { 1001, 1002, 1003, 1004 }, photos.Select(photo => photo.GetProperty("id").GetInt32()));
         Assert.All(photos.Take(3), photo =>
         {
-            Assert.Equal("review", photo.GetProperty("status").GetString());
+            Assert.Equal("error", photo.GetProperty("status").GetString());
             Assert.Equal("no_preview", photo.GetProperty("reasons")[0].GetString());
         });
         var manual = photos[3];

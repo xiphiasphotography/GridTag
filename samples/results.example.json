@@ -5,7 +5,7 @@
   "photos": [
     {
       "id": 1001,
-      "status": "auto",
+      "status": "error",
       "reasons": [],
       "session": "FP2",
       "cars": [
@@ -38,18 +38,18 @@
     },
     {
       "id": 1002,
-      "status": "review",
+      "status": "error",
       "reasons": [
-        "confusable:59,66,89,99"
+        "no_preview"
       ],
       "session": "FP2",
       "cars": []
     },
     {
       "id": 1003,
-      "status": "noCar",
+      "status": "error",
       "reasons": [
-        "no_car_detected"
+        "no_preview"
       ],
       "session": "FP2",
       "cars": []

@@ -50,7 +50,7 @@ public sealed class PipelineTests
         var pipeline = new TaggingPipeline(
             CreateEntryList(),
             CreateContext(),
-            new FakePreviewProvider(new object()),
+            new FakePreviewProvider(new FakePreview(100, 60)),
             new FakeCarDetector(
                 new DetectedCar("large", 0.95),
                 new DetectedCar("small", 0.70)),
@@ -73,7 +73,7 @@ public sealed class PipelineTests
         var pipeline = new TaggingPipeline(
             CreateEntryList(),
             CreateContext(),
-            new FakePreviewProvider(new object()),
+            new FakePreviewProvider(new FakePreview(100, 60)),
             new FakeCarDetector(
                 new DetectedCar("large", 0.95),
                 new DetectedCar("small", 0.80)),
@@ -94,7 +94,7 @@ public sealed class PipelineTests
         var pipeline = new TaggingPipeline(
             CreateEntryList(),
             CreateContext(),
-            new FakePreviewProvider(new object()),
+            new FakePreviewProvider(new FakePreview(100, 60)),
             new FakeCarDetector(),
             new FakePlateReader(),
             fieldBuilder: new FieldBuilder());
@@ -118,7 +118,7 @@ public sealed class PipelineTests
 
         var result = pipeline.ProcessPhoto(new ManifestPhoto(7, "u7", "D:/photo.arw", new DateTimeOffset(2026, 9, 18, 13, 52, 0, TimeSpan.Zero)));
 
-        Assert.Equal("review", result.Status);
+        Assert.Equal("error", result.Status);
         Assert.Contains("no_preview", result.Reasons);
     }
 
@@ -128,7 +128,7 @@ public sealed class PipelineTests
         var pipeline = new TaggingPipeline(
             CreateEntryList(),
             CreateContext(),
-            new FakePreviewProvider(new object()),
+            new FakePreviewProvider(new FakePreview(100, 60)),
             new FakeCarDetector(new DetectedCar("fail", 0.90)),
             new ThrowingPlateReader(),
             fieldBuilder: new FieldBuilder());
@@ -169,7 +169,7 @@ public sealed class PipelineTests
         return new TaggingPipeline(
             CreateEntryList(),
             CreateContext(),
-            new FakePreviewProvider(new object()),
+            new FakePreviewProvider(new FakePreview(100, 60)),
             new FakeCarDetector(new DetectedCar("car-1", 0.90)),
             new FakePlateReader(new NumberHypothesis("69", 0.98)),
             fieldBuilder: new FieldBuilder());
@@ -200,11 +200,11 @@ public sealed class PipelineTests
 
     private sealed class FakePreviewProvider : IRawPreviewProvider
     {
-        private readonly object? preview;
+        private readonly IPreview? preview;
 
-        public FakePreviewProvider(object? preview) => this.preview = preview;
+        public FakePreviewProvider(IPreview? preview) => this.preview = preview;
 
-        public object? GetPreview(string path) => preview;
+        public IPreview? GetPreview(string path) => preview;
     }
 
     private sealed class FakeCarDetector : ICarDetector
@@ -213,7 +213,7 @@ public sealed class PipelineTests
 
         public FakeCarDetector(params DetectedCar[] detections) => this.detections = detections;
 
-        public IReadOnlyList<DetectedCar> Detect(object preview) => detections;
+        public IReadOnlyList<DetectedCar> Detect(IPreview preview) => detections;
     }
 
     private sealed class FakePlateReader : IPlateReader
@@ -222,7 +222,7 @@ public sealed class PipelineTests
 
         public FakePlateReader(params NumberHypothesis[] hypotheses) => this.hypotheses = hypotheses;
 
-        public IReadOnlyList<NumberHypothesis> ReadNumbers(object preview, DetectedCar detectedCar)
+        public IReadOnlyList<NumberHypothesis> ReadNumbers(IPreview preview, DetectedCar detectedCar)
         {
             if (hypotheses.Count == 0)
                 return Array.Empty<NumberHypothesis>();
@@ -238,7 +238,9 @@ public sealed class PipelineTests
 
     private sealed class ThrowingPlateReader : IPlateReader
     {
-        public IReadOnlyList<NumberHypothesis> ReadNumbers(object preview, DetectedCar detectedCar)
+        public IReadOnlyList<NumberHypothesis> ReadNumbers(IPreview preview, DetectedCar detectedCar)
             => throw new InvalidOperationException("plate reader exploded");
     }
+
+    private sealed record FakePreview(int Width, int Height) : IPreview;
 }

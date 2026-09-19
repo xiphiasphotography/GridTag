@@ -63,7 +63,15 @@ public sealed record FieldTemplates(
         "De {car} met startnummer {nr} van {team} rijdt op {location} tijdens de {series}.");
 
     /// <summary>Gets the default no-session template set.</summary>
-    public static FieldTemplates NoSessionDefault() => Default();
+    public static FieldTemplates NoSessionDefault()
+    {
+        var defaults = Default();
+        return defaults with
+        {
+            Caption = defaults.CaptionNoSession,
+            ExtDescription = defaults.ExtDescriptionNoSession
+        };
+    }
 }
 
 /// <summary>Renders a template string using the known field placeholders.</summary>
@@ -111,6 +119,23 @@ public sealed class SessionResolver
 
         return context.DefaultSession;
     }
+
+    /// <summary>Returns the human-readable session name for a code, falling back to the code itself.</summary>
+    public static string? ResolveName(string? sessionCode, EventContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (string.IsNullOrWhiteSpace(sessionCode))
+            return sessionCode;
+
+        foreach (var session in context.Sessions)
+        {
+            if (string.Equals(session.Code, sessionCode, StringComparison.OrdinalIgnoreCase))
+                return session.Name;
+        }
+
+        return sessionCode;
+    }
 }
 
 /// <summary>Contains the generated metadata strings and keywords for one car.</summary>
@@ -133,6 +158,47 @@ public sealed record GeneratedFields(
     public string? Session { get; init; }
 }
 
+/// <summary>One car's entry-list data used when assembling keywords.</summary>
+/// <param name="Entry">The entry-list row for the car.</param>
+public sealed record CarKeywordSource(Entry Entry);
+
+/// <summary>Assembles the ordered, case-insensitively de-duplicated keyword list for one or more cars.</summary>
+public static class KeywordAssembler
+{
+    /// <summary>Builds keywords as team, car, drivers, #number per car, then the session name, then distinct classes with their phases.</summary>
+    public static string[] Assemble(IReadOnlyList<CarKeywordSource> cars, string? sessionName)
+    {
+        var keywords = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var classes = new List<string>();
+        var seenClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string keyword)
+        {
+            if (!string.IsNullOrWhiteSpace(keyword) && seen.Add(keyword))
+                keywords.Add(keyword);
+        }
+
+        foreach (var car in cars)
+        {
+            Add(car.Entry.Team);
+            Add(car.Entry.Car);
+            foreach (var driver in car.Entry.Drivers)
+                Add(driver.Name);
+            Add($"#{car.Entry.Number}");
+            if (seenClasses.Add(car.Entry.Class))
+                classes.Add(car.Entry.Class);
+        }
+
+        if (!string.IsNullOrWhiteSpace(sessionName))
+            Add(sessionName);
+        foreach (var @class in classes)
+            Add(@class);
+
+        return keywords.ToArray();
+    }
+}
+
 /// <summary>Builds the metadata fields for a single entry using the event templates.</summary>
 public sealed class FieldBuilder
 {
@@ -145,7 +211,7 @@ public sealed class FieldBuilder
         ArgumentNullException.ThrowIfNull(context);
 
         var session = sessionCode ?? context.DefaultSession;
-        var sessionName = context.Sessions.FirstOrDefault(s => string.Equals(s.Code, session, StringComparison.OrdinalIgnoreCase))?.Name ?? session;
+        var sessionName = SessionResolver.ResolveName(session, context);
         var drivers = entry.Drivers.Select(d => string.IsNullOrWhiteSpace(d.Nationality) ? d.Name : $"{d.Name} ({d.Nationality})").ToArray();
         var verb = entry.Drivers.Count > 1 ? "rijden" : "rijdt";
         var driverText = drivers.Length switch
@@ -164,7 +230,7 @@ public sealed class FieldBuilder
             ["class"] = entry.Class,
             ["drivers"] = driverText,
             ["verb"] = verb,
-            ["session"] = sessionName,
+            ["session"] = sessionName ?? string.Empty,
             ["series"] = context.SeriesName,
             ["event"] = context.EventFullName,
             ["location"] = context.Location,
@@ -182,27 +248,9 @@ public sealed class FieldBuilder
             ? renderer.Render(templates.ExtDescriptionNoSession, values)
             : renderer.Render(templates.ExtDescription, values);
 
-        var keywords = new List<string>();
-        keywords.Add(entry.Team);
-        keywords.Add(entry.Car);
-        foreach (var driver in entry.Drivers)
-            keywords.Add(driver.Name);
-        keywords.Add($"#{entry.Number}");
-        if (!string.IsNullOrWhiteSpace(sessionName))
-            keywords.Add(sessionName);
-        keywords.Add(entry.Class);
+        var keywords = KeywordAssembler.Assemble([new CarKeywordSource(entry)], sessionName);
 
-        var deduped = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var keyword in keywords)
-        {
-            if (seen.Add(keyword))
-                deduped.Add(keyword);
-        }
-
-        var persons = entry.Drivers.Select(d => d.Name).Distinct(StringComparer.Ordinal).ToArray();
-
-        return new GeneratedFields(headline, caption, altText, extDescription, deduped.ToArray(), persons)
+        return new GeneratedFields(headline, caption, altText, extDescription, keywords, entry.Drivers.Select(d => d.Name).Distinct(StringComparer.Ordinal).ToArray())
         {
             Session = session
         };

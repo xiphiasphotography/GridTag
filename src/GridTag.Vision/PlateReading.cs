@@ -197,7 +197,7 @@ public sealed class OnnxPlateReader : IPlateReader
     }
 
     /// <summary>Returns raw n-best hypotheses without consulting an entry list.</summary>
-    public IReadOnlyList<NumberHypothesis> ReadNumbers(object preview, DetectedCar detectedCar)
+    public IReadOnlyList<NumberHypothesis> ReadNumbers(IPreview preview, DetectedCar detectedCar)
     {
         try
         {

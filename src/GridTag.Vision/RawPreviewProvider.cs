@@ -17,7 +17,7 @@ public enum RawPreviewSource
 }
 
 /// <summary>Decoded preview payload passed to later vision stages.</summary>
-public sealed record RawPreview(byte[] JpegBytes, int Width, int Height, RawPreviewSource Source);
+public sealed record RawPreview(byte[] JpegBytes, int Width, int Height, RawPreviewSource Source) : IPreview;
 
 /// <summary>Reads an embedded JPEG first and falls back to a half-size Windows decode.</summary>
 /// <remarks>
@@ -27,7 +27,7 @@ public sealed record RawPreview(byte[] JpegBytes, int Width, int Height, RawPrev
 public sealed class EmbeddedJpegRawPreviewProvider : IRawPreviewProvider
 {
     /// <summary>Returns a preview, or null for missing, unsupported, corrupt, or unreadable files.</summary>
-    public object? GetPreview(string path)
+    public IPreview? GetPreview(string path)
     {
         try
         {

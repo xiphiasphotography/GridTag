@@ -151,7 +151,7 @@ public sealed class OnnxCarDetector : ICarDetector, IDisposable
     private readonly InferenceSession session;
     private readonly string inputName;
 
-    /// <summary>Creates a detector and loads the configured ONNX model.</summary>
+    /// <summary>Loads the model and pins all inputs to the requested runtime configuration.</summary>
     public OnnxCarDetector(CarDetectorConfig config)
     {
         this.config = config ?? throw new ArgumentNullException(nameof(config));
@@ -162,7 +162,7 @@ public sealed class OnnxCarDetector : ICarDetector, IDisposable
     }
 
     /// <summary>Runs detection and returns car detections; failed frames return no detections.</summary>
-    public IReadOnlyList<DetectedCar> Detect(object preview)
+    public IReadOnlyList<DetectedCar> Detect(IPreview preview)
     {
         try
         {

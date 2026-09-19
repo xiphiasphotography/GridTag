@@ -24,11 +24,11 @@ public sealed class EvaluationTests
         Assert.Equal(3, report.LabeledCarPhotos);
         Assert.Equal(2, report.AutoPhotos);
         Assert.Equal(1, report.CorrectAutoPhotos);
-        Assert.Equal(2, report.ReviewPhotos);
+        Assert.Equal(1, report.ReviewPhotos);
         Assert.Equal(1, report.WrongAutoPhotos);
         Assert.Equal(0.5, report.AutoPrecision);
         Assert.Equal(1.0 / 3.0, report.Recall, 6);
-        Assert.Equal(0.5, report.ReviewRate);
+        Assert.Equal(0.25, report.ReviewRate);
         Assert.Equal(1, report.ReasonCounts["small_margin"]);
         Assert.Equal(1, report.ReasonCounts["no_preview"]);
         Assert.Equal(1, report.Confusions["69->3"]);
@@ -88,22 +88,29 @@ public sealed class EvaluationTests
 
     private sealed class FakePreviewProvider : IRawPreviewProvider
     {
-        public object? GetPreview(string path) => path == "no-car.arw" ? null : path;
+        public IPreview? GetPreview(string path) => path == "no-car.arw" ? null : new FakePreview(path);
     }
 
     private sealed class FakeCarDetector : ICarDetector
     {
-        public IReadOnlyList<DetectedCar> Detect(object preview) => [new DetectedCar(preview.ToString()!, 1.0)];
+        public IReadOnlyList<DetectedCar> Detect(IPreview preview) => [new DetectedCar(((FakePreview)preview).Id, 1.0)];
     }
 
     private sealed class FakePlateReader : IPlateReader
     {
-        public IReadOnlyList<NumberHypothesis> ReadNumbers(object preview, DetectedCar detectedCar) => detectedCar.Id switch
+        public IReadOnlyList<NumberHypothesis> ReadNumbers(IPreview preview, DetectedCar detectedCar) => detectedCar.Id switch
         {
             "correct.arw" => [new NumberHypothesis("69", 0.99)],
             "wrong.arw" => [new NumberHypothesis("3", 0.99)],
             "review.arw" => [new NumberHypothesis("69", 0.91), new NumberHypothesis("96", 0.90)],
             _ => []
         };
+    }
+
+    private sealed record FakePreview(string Id) : IPreview
+    {
+        public int Width => 100;
+
+        public int Height => 60;
     }
 }
