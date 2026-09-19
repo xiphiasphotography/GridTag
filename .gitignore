@@ -1,0 +1,33 @@
+# .NET build outputs and IDE state
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+artifacts/
+
+# Local processing outputs and credentials
+work/
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+
+# Original photos stay outside version control
+*.ARW
+*.arw
+*.CR2
+*.cr2
+*.CR3
+*.cr3
+*.NEF
+*.nef
+*.DNG
+*.dng
+
+# OS files
+Thumbs.db
+.DS_Store

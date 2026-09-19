@@ -1,0 +1,31 @@
+{
+  "_note": "Voorbeeld van wat de plugin schrijft. In de praktijk bevat een run alleen analyse-foto's of alleen foto's met manualNumber; hier staan ze samen ter illustratie.",
+  "schemaVersion": 1,
+  "photos": [
+    {
+      "id": 1001,
+      "uuid": "00000000-0000-0000-0000-000000001001",
+      "path": "D:\\2026-09-18 - GTWC Zandvoort\\_MWR1001.ARW",
+      "captureTime": "2026-09-18T13:52:10"
+    },
+    {
+      "id": 1002,
+      "uuid": "00000000-0000-0000-0000-000000001002",
+      "path": "D:\\2026-09-18 - GTWC Zandvoort\\_MWR1002.ARW",
+      "captureTime": "2026-09-18T13:52:12"
+    },
+    {
+      "id": 1003,
+      "uuid": "00000000-0000-0000-0000-000000001003",
+      "path": "D:\\2026-09-18 - GTWC Zandvoort\\_MWR1003.ARW",
+      "captureTime": "2026-09-18T13:55:40"
+    },
+    {
+      "id": 1004,
+      "uuid": "00000000-0000-0000-0000-000000001004",
+      "path": "D:\\2026-09-18 - GTWC Zandvoort\\_MWR1004.ARW",
+      "captureTime": "2026-09-18T14:03:21",
+      "manualNumber": "69, 3"
+    }
+  ]
+}

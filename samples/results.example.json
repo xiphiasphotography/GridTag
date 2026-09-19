@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "toolVersion": "0.1.0",
+  "generatedAt": "2026-09-18T14:10:00Z",
+  "photos": [
+    {
+      "id": 1001,
+      "status": "auto",
+      "reasons": [],
+      "session": "FP2",
+      "cars": [
+        {
+          "number": "69",
+          "confidence": 0.98,
+          "source": "ocr",
+          "primary": true
+        }
+      ],
+      "fields": {
+        "headline": "#69 Emil Frey Racing Ferrari 296 GT3 EVO",
+        "caption": "Free Practice 2 - Thierry Vermeulen (NED) en Ben Green (GBR) rijden de Ferrari 296 GT3 EVO met startnummer #69 voor Emil Frey Racing tijdens de GT World Challenge Europe powered by AWS op Circuit Zandvoort.",
+        "altText": "Raceauto nummer 69 van Emil Frey Racing in actie op Circuit Zandvoort tijdens de GT World Challenge Europe.",
+        "extDescription": "De Ferrari 296 GT3 EVO met startnummer 69 van Emil Frey Racing rijdt op Circuit Zandvoort tijdens Free Practice 2 van de GT World Challenge Europe.",
+        "keywords": [
+          "Emil Frey Racing",
+          "Ferrari 296 GT3 EVO",
+          "Thierry Vermeulen",
+          "Ben Green",
+          "#69",
+          "Free Practice 2",
+          "PRO"
+        ],
+        "persons": [
+          "Thierry Vermeulen",
+          "Ben Green"
+        ]
+      }
+    },
+    {
+      "id": 1002,
+      "status": "review",
+      "reasons": [
+        "confusable:59,66,89,99"
+      ],
+      "session": "FP2",
+      "cars": []
+    },
+    {
+      "id": 1003,
+      "status": "noCar",
+      "reasons": [
+        "no_car_detected"
+      ],
+      "session": "FP2",
+      "cars": []
+    },
+    {
+      "id": 1004,
+      "status": "manual",
+      "reasons": [],
+      "session": "FP2",
+      "cars": [
+        {
+          "number": "69",
+          "confidence": 1.0,
+          "source": "manual",
+          "primary": true
+        },
+        {
+          "number": "3",
+          "confidence": 1.0,
+          "source": "manual",
+          "primary": false
+        }
+      ],
+      "fields": {
+        "headline": "#69 Emil Frey Racing Ferrari 296 GT3 EVO",
+        "caption": "Free Practice 2 - Thierry Vermeulen (NED) en Ben Green (GBR) rijden de Ferrari 296 GT3 EVO met startnummer #69 voor Emil Frey Racing tijdens de GT World Challenge Europe powered by AWS op Circuit Zandvoort.",
+        "altText": "Raceauto nummer 69 van Emil Frey Racing in actie op Circuit Zandvoort tijdens de GT World Challenge Europe.",
+        "extDescription": "De Ferrari 296 GT3 EVO met startnummer 69 van Emil Frey Racing rijdt op Circuit Zandvoort tijdens Free Practice 2 van de GT World Challenge Europe.",
+        "keywords": [
+          "Emil Frey Racing",
+          "Ferrari 296 GT3 EVO",
+          "Thierry Vermeulen",
+          "Ben Green",
+          "#69",
+          "Mercedes - AMG Team Verstappen Racing",
+          "Mercedes-AMG GT3 EVO",
+          "Dani Juncadella",
+          "Chris Lulham",
+          "#3",
+          "Free Practice 2",
+          "PRO"
+        ],
+        "persons": [
+          "Thierry Vermeulen",
+          "Ben Green",
+          "Dani Juncadella",
+          "Chris Lulham"
+        ]
+      }
+    }
+  ]
+}
