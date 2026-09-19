@@ -2,7 +2,7 @@
 
 GridTag herkent startnummers op raceauto's in RAW-foto's, controleert de match tegen de entrylist en aanvullende visuele aanwijzingen zoals automerk/-model en logo's, en voegt daarna automatisch de juiste auto-specifieke IPTC-metadata toe in **Lightroom Classic**: headline, beschrijving, alt-tekst, keywords en rijdersnamen. GridTag komt pas in actie nadat de foto's handmatig zijn geselecteerd en bewerkt.
 
-> Status: projectstart. Deze README en `AGENTS.md` zijn bedoeld om het project met Codex in VS Code op te bouwen. De code wordt stap voor stap gemaakt volgens de takenlijst in `AGENTS.md` (§15).
+> Status: **0.0.1 (beta)**. De CLI, domeinlogica en Lightroom-adapter werken en zijn getest; de vision-modellen (autodetectie en nummer-OCR) moeten nog worden gekoppeld. Zonder model-configuratie meldt elke foto `error` met reden `no_preview`. Zie `docs/release-notes-0.0.1.md`.
 
 ## Implementation status
 
@@ -132,6 +132,58 @@ tools/       Python-scripts voor training (later)
 - **Visual Studio Code** met de C# Dev Kit en een Lua-extensie (bijv. *Lua* van sumneko). Codex-extensie of Codex CLI.
 - **Lightroom Classic**. Voor de alt-tekstvelden is SDK-versie 13.2 of nieuwer nodig, oudere versies slaan die velden over.
 - Later voor de herkenning: bij voorkeur een GPU. De inference-backend blijft verwisselbaar (bijv. ONNX Runtime/DirectML of WinML).
+
+## Snelstart (gebruiken)
+
+### 1. Bouwen en testen
+```text
+dotnet restore GridTag.slnx
+dotnet build   GridTag.slnx
+dotnet test    GridTag.slnx
+```
+
+Verwacht: build met 0 warnings, 62 tests groen. Er zijn geen foto's of Lightroom nodig voor deze stap.
+
+### 2. CLI gebruiken
+```text
+dotnet run --project src/GridTag.Cli -- version
+dotnet run --project src/GridTag.Cli -- check-entrylist --entrylist samples/entrylist.csv
+dotnet run --project src/GridTag.Cli -- fields --entrylist samples/entrylist.csv --session samples/session.example.json --number 69
+dotnet run --project src/GridTag.Cli -- run --manifest samples/manifest.example.json --entrylist samples/entrylist.csv --session samples/session.example.json --out work/results.json
+dotnet run --project src/GridTag.Cli -- preview --file "D:\foto.ARW" --out work/preview.jpg
+dotnet run --project src/GridTag.Cli -- eval --labels work/labels.csv --entrylist samples/entrylist.csv --session samples/session.example.json
+```
+
+`fields` is de snelste manier om de gegenereerde metadata te controleren zonder foto's. `preview` schrijft de uit een RAW geëxtraheerde JPEG weg, zodat je kunt zien wat de vision-stappen krijgen.
+
+Exit codes: `0` ok · `1` onverwachte fout · `2` usage-fout · `3` ongeldig of ontbrekend invoerbestand. Een fout op één foto laat de hele run niet mislukken; die foto krijgt `status: "error"`.
+
+### 3. Vision-modellen koppelen (optioneel, voor `run`)
+
+Zonder `--vision-config` en `--plate-config` gebruikt de CLI null-implementaties en levert `run` per foto `error`/`no_preview` op. Met modellen:
+
+```text
+dotnet run --project src/GridTag.Cli -- run --manifest work/manifest.json --entrylist samples/entrylist.csv --session work/session.json --out work/results.json --vision-config work/detector.json --plate-config work/plate.json
+```
+
+Modelgewichten blijven buiten de repository. Extra opties: `--timing-csv` en `--clock-offset` voor timing-controle.
+
+### 4. Plugin in Lightroom Classic
+1. **Bestand → Plug-inbeheer → Toevoegen** → kies `lightroom/GridTag.lrdevplugin`.
+2. **Bibliotheek → Plug-in-extra's → GridTag: instellingen…**: vul het pad naar de CLI (`gridtag.exe` of `dotnet <pad>\gridtag.dll`), `entrylist.csv` en `session.json`, plus de chunkgrootte.
+3. Bewerken en selecteren zoals altijd, zet de definitieve beelden op **Pick**.
+4. Selecteer de foto's en gebruik **GridTag: tag Picks**.
+5. Foto's die niet automatisch lukken staan in `GridTag Review` (of `GridTag GeenAuto`). Typ daar het nummer in *Startnummer (handmatig)* en gebruik **GridTag: verwerk handmatige nummers**.
+
+GridTag schrijft alleen in de Lightroom-catalogus; er worden geen XMP-sidecars of RAW-bestanden aangepast.
+
+### 5. Lua-tests (optioneel)
+
+```text
+lua run_lua_tests.lua
+```
+
+Draait `CatalogWriter` tegen gestubde Lightroom-API's: status/manual-bescherming, keyword-opruiming, chunking en het overleven van een falende `setRawMetadata`. Vereist alleen een Lua-interpreter; Lightroom is niet nodig.
 
 ## Aan de slag met Codex
 
